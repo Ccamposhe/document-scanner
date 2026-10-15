@@ -1,4 +1,4 @@
-# 📄 Scanner de Documentos — Visão Computacional
+# 📄 Scanner de Documentos
 
 Projeto acadêmico desenvolvido para a disciplina de **Algorítmos de Processamento de Imagem**, com o objetivo de explorar técnicas de processamento de imagens aplicadas à digitalização e ao reconhecimento de documentos.
 
