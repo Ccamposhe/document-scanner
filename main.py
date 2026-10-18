@@ -29,138 +29,142 @@ def scan_detector(image):
 
 
 class ImagePreprocessorApp:
+    #Etapas do pipeline (chave interna, título)
+    ETAPAS = [
+        ("original", "Entrada"),
+        ("gray", "Escala de cinza"),
+        ("blur", "Gaussian Blur"),
+        ("threshold", "Threshold"),
+        ("edged", "Bordas (Canny)"),
+    ]
+
     def __init__(self, root):
         self.root = root
-        self.root.title("Visualizador de Pré-processamento")
+        self.root.title("Scanner de Documentos")
         self.root.geometry("1200x760")
 
-        # Botão para selecionar uma imagem
-        button = tk.Button(
-            root,
-            text="Selecionar imagem",
-            command=self.load_image,
-            font=("Arial", 12)
+        self.imagem = None
+        self.resultado = None
+        self.fotos = {}
+        self.labels = {}
+
+        #Barra lateral
+        barra = tk.Frame(root, padx=20, pady=20)
+        barra.pack(side="left", fill="y")
+
+        #Botoes
+        #command=self.carregar
+        tk.Button(barra, text="Escolher arquivo", command=self.carregar,
+                  font=("Arial", 11, "bold")).pack(fill="x")
+
+        #command=self.processar
+        self.btn = tk.Button(barra, text="Processar", command=self.processar,
+                             font=("Arial", 11, "bold"), state="disabled")
+        self.btn.pack(fill="x", pady=12)
+
+        #command=self.salvar
+        self.btn_salvar = tk.Button(barra, text="Salvar", command=self.salvar,
+                                    font=("Arial", 11, "bold"),
+                                    bg="#215041", fg="white")
+        self.btn_salvar.pack(fill="x")
+
+        #Área principal
+        grade = tk.Frame(root, padx=10, pady=10)
+        grade.pack(side="left", fill="both", expand=True)
+
+        #Organizado em grade de 3 colunas
+        for i, (chave, titulo) in enumerate(self.ETAPAS):
+            quadro = tk.LabelFrame(grade, text=titulo, padx=6, pady=6)
+            quadro.grid(row=i // 3, column=i % 3, padx=6, pady=6, sticky="nsew")
+
+
+            self.labels[chave] = tk.Label(quadro, text="Aguardando")
+            self.labels[chave].pack()
+
+        #Define o tamanho de colunas e linhas de acordo com a janela
+        for c in range(3):
+            grade.grid_columnconfigure(c, weight=1)
+        for r in range(2):
+            grade.grid_rowconfigure(r, weight=1)
+
+    def carregar(self):
+
+      #Askopenfilename
+      #askopenfilename abre a janela nativa do sistema para escolher um arquivo
+      #O filtro Imagens mostra só os formatos de imagem suportados
+      #Todos os arquivos permite ver qualquer arquivo se o usuário precisar
+        caminho = filedialog.askopenfilename(
+            filetypes=[("Imagens", "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                       ("Todos os arquivos", "*.*")]
         )
-        button.grid(
-            row=0,
-            column=0,
-            columnspan=3,
-            pady=12
-        )
-
-        # Etapas do processamento
-        stages = [
-            ("original", "1. Imagem original"),
-            ("gray", "2. Escala de cinza"),
-            ("blur", "3. Gaussian Blur"),
-            ("threshold", "4. Threshold"),
-            ("edged", "5. Canny - detecção de bordas")
-        ]
-
-        self.image_labels = {}
-
-        # Criar os painéis em três colunas
-        for index, (key, title) in enumerate(stages):
-            row = (index // 3) + 1
-            column = index % 3
-
-            frame = tk.LabelFrame(
-                root,
-                text=title,
-                padx=8,
-                pady=8
-            )
-
-            frame.grid(
-                row=row,
-                column=column,
-                padx=8,
-                pady=8,
-                sticky="nsew"
-            )
-
-            label = tk.Label(
-                frame,
-                text="Selecione uma imagem",
-                anchor="center"
-            )
-            label.pack(fill="both", expand=True)
-
-            self.image_labels[key] = label
-
-        # Distribuir igualmente o espaço entre as colunas
-        for column in range(3):
-            root.grid_columnconfigure(column, weight=1)
-
-        # Distribuir o espaço entre as duas linhas de imagens
-        root.grid_rowconfigure(1, weight=1)
-        root.grid_rowconfigure(2, weight=1)
-
-    def load_image(self):
-        # Escolha de imagem desativada temporariamente pra usar a IMAGEM_TESTE como imagem padrão.
-        # Pra reativar: tirar os comentários e comentar/remover a linha logo abaixo, onde tem path = IMAGEM_TESTE
-        #path = filedialog.askopenfilename(
-        #    title="Escolha uma imagem",
-        #    filetypes=[
-        #        (
-        #            "Imagens",
-        #            "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"
-        #        ),
-        #        ("Todos os arquivos", "*.*")
-        #    ]
-        #)
-
-        path = IMAGEM_TESTE
-
-        if not path:
+        if not caminho:
             return
 
-        # Ler a imagem
-        image = cv2.imread(path)
-
-        if image is None:
-            messagebox.showerror(
-                "Erro",
-                "Não foi possível abrir essa imagem."
-            )
+        imagem = cv2.imread(caminho)
+        if imagem is None:
+            messagebox.showerror("Erro", "Não foi possível abrir essa imagem.")
             return
 
-        # Executar o pré-processamento
-        gray, blur, threshold, edged = scan_detector(image)
+        self.imagem = imagem
+        self.resultado = None
+        self.btn.config(state="normal")
+        self.mostrar("original", imagem)
 
-        # Relacionar cada resultado ao seu painel
-        images = {
-            "original": image,
-            "gray": gray,
-            "blur": blur,
-            "threshold": threshold,
-            "edged": edged
-        }
+        for chave, _ in self.ETAPAS[1:]:
+            self.labels[chave].config(image="", text="Aguardando")
 
-        for key, array in images.items():
-            # Converter a imagem para o formato aceito pelo Pillow
-            if len(array.shape) == 2:
-                # Imagem em escala de cinza
-                pil_image = Image.fromarray(array)
-            else:
-                # Converter BGR para RGB
-                rgb = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
-                pil_image = Image.fromarray(rgb)
+    def processar(self):
+        if self.imagem is None:
+            return
 
-            # Redimensionar sem distorcer a proporção
-            pil_image.thumbnail(
-                (350, 230),
-                Image.Resampling.LANCZOS
-            )
+        #scan_detector devolve as quatro imagens 
+        gray, blur, threshold, edged = scan_detector(self.imagem)
 
-            # Converter para exibição no Tkinter
-            photo = ImageTk.PhotoImage(pil_image)
+        for chave, img in zip(("gray", "blur", "threshold", "edged"),
+                              (gray, blur, threshold, edged)):
+            self.mostrar(chave, img)
 
-            label = self.image_labels[key]
-            label.configure(image=photo, text="")
+        #Define a escala de cinza como arquivo que sera salvo
+        self.resultado = gray
 
-            # Impedir que a imagem seja removida da memória
-            label.image = photo
+    def salvar(self):
+        if self.resultado is None:
+            messagebox.showwarning("Aviso", "Processe a imagem antes de salvar.")
+            return
+
+        #Asksaveasfilename
+        #Escolhe onde salvar o arquivo
+        caminho = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG", "*.png")],
+            initialfile="scan_resultado.png",
+        )
+        if not caminho:
+            return
+
+        array = self.resultado
+        if len(array.shape) == 3:
+            array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
+
+        #Fromarray e .save
+        #fromarray cria um objeto PIL Image a partir do array NumPy
+        #save grava esse objeto no caminho escolhido, forçando o formato PNG
+        Image.fromarray(array).save(caminho, "PNG")
+        
+        #Mostra uma confirmação com o local onde o arquivo foi salvo
+        messagebox.showinfo("Pronto", f"Salvo em:\n{caminho}")
+
+    def mostrar(self, chave, array):
+        if len(array.shape) == 3:
+            array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
+        pil = Image.fromarray(array)
+
+        #Thumbnail 
+        #Reduz para caber no quadro sem alterar a imagem original
+        pil.thumbnail((300, 220))
+
+        self.fotos[chave] = ImageTk.PhotoImage(pil)
+        self.labels[chave].config(image=self.fotos[chave], text="")
 
 
 if __name__ == "__main__":
