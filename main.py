@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
+from ocr import extrair_texto
+
 import cv2
 from PIL import Image, ImageTk
 
@@ -45,6 +47,7 @@ class ImagePreprocessorApp:
 
         self.imagem = None
         self.resultado = None
+        self.texto_ocr = ""
         self.fotos = {}
         self.labels = {}
 
@@ -67,6 +70,24 @@ class ImagePreprocessorApp:
                                     font=("Arial", 11, "bold"),
                                     bg="#215041", fg="white")
         self.btn_salvar.pack(fill="x")
+        
+        #command=self.OCR
+        self.btn_ocr = tk.Button(
+            barra,
+            text="Extrair texto (OCR)",
+            command=self.executar_ocr,
+            font=("Arial", 11, "bold"),
+        )
+        self.btn_ocr.pack(fill="x", pady=12)
+
+        self.btn_salvar_texto = tk.Button(
+            barra,
+            text="Salvar texto (.txt)",
+            command=self.salvar_texto,
+            font=("Arial", 11, "bold"),
+            state="disabled",
+        )
+        self.btn_salvar_texto.pack(fill="x")
 
         #Área principal
         grade = tk.Frame(root, padx=10, pady=10)
@@ -107,6 +128,8 @@ class ImagePreprocessorApp:
 
         self.imagem = imagem
         self.resultado = None
+        self.texto_ocr = ""
+        self.btn_salvar_texto.config(state="disabled")
         self.btn.config(state="normal")
         self.mostrar("original", imagem)
 
@@ -126,6 +149,49 @@ class ImagePreprocessorApp:
 
         #Define a escala de cinza como arquivo que sera salvo
         self.resultado = gray
+        self.texto_ocr = ""
+        self.btn_salvar_texto.config(state="disabled")
+
+    def executar_ocr(self):
+        if self.resultado is None:
+            messagebox.showwarning(
+                "Aviso", "Processe a imagem antes de extrair o texto."
+            )
+            return
+
+        self.texto_ocr = ""
+        self.btn_salvar_texto.config(state="disabled")
+        texto = extrair_texto(self.resultado)
+
+        if not texto:
+            messagebox.showinfo("OCR", "Nenhum texto foi encontrado.")
+            return
+
+        self.texto_ocr = texto
+        self.btn_salvar_texto.config(state="normal")
+        messagebox.showinfo("Texto extraído", texto)
+
+    def salvar_texto(self):
+        if not self.texto_ocr.strip():
+            messagebox.showwarning("Aviso", "Extraia o texto com OCR antes de salvar.")
+            return
+
+        caminho = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Arquivo de texto", "*.txt")],
+            initialfile="texto_extraido.txt",
+        )
+        if not caminho:
+            return
+
+        try:
+            with open(caminho, "w", encoding="utf-8") as arquivo:
+                arquivo.write(self.texto_ocr)
+        except OSError as erro:
+            messagebox.showerror("Erro", f"Não foi possível salvar o texto:\n{erro}")
+            return
+
+        messagebox.showinfo("Pronto", f"Texto salvo em:\n{caminho}")
 
     def salvar(self):
         if self.resultado is None:
