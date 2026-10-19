@@ -18,6 +18,8 @@ def extrair_texto(imagem, idioma="por"):
         if imagem.shape[2] not in (3, 4):
             raise ValueError("A imagem colorida deve ter 3 ou 4 canais.")
         imagem = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
+    
+    #Aplicando o threshold adaptativo para quando for extrair o texto ficar mais legivel
 
     blur = cv2.GaussianBlur(imagem, (3, 3), 0)
     threshold = cv2.adaptiveThreshold(
