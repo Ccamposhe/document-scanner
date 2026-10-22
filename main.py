@@ -4,11 +4,102 @@ from tkinter import filedialog, messagebox
 from ocr import extrair_texto
 
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 
 IMAGEM_TESTE = "./assets/identidade-mc-lovin.jpg"
 
-def scan_detector(image):
+def order_points(pts):
+    # Inicializa uma lista de coordenadas que serão ordenadas
+    # na ordem: topo-esquerdo, topo-direito, baixo-direito, baixo-esquerdo
+    rect = np.zeros((4, 2), dtype="float32")
+
+    # O topo-esquerdo terá a menor soma, o baixo-direito terá a maior soma
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+
+    # O topo-direito terá a menor diferença, o baixo-esquerdo terá a maior diferença
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+
+    return rect
+
+
+def four_point_transform(image, points):
+    rect = order_points(points)
+
+    top_left, top_right, bottom_right, bottom_left = rect
+
+    # Calcular as dimensões aproximadas do documento.
+    width_a = np.linalg.norm(bottom_right - bottom_left)
+    width_b = np.linalg.norm(top_right - top_left)
+
+    height_a = np.linalg.norm(top_right - bottom_right)
+    height_b = np.linalg.norm(top_left - bottom_left)
+
+    max_width = int(max(width_a, width_b))
+    max_height = int(max(height_a, height_b))
+
+    if max_width < 2 or max_height < 2:
+        return None
+
+    # Definir os quatro cantos da imagem de destino.
+    destination = np.array(
+        [
+            [0, 0],
+            [max_width - 1, 0],
+            [max_width - 1, max_height - 1],
+            [0, max_height - 1]
+        ],
+        dtype="float32"
+    )
+
+    # Calcular a matriz de transformação de perspectiva.
+    matrix = cv2.getPerspectiveTransform(rect, destination)
+
+    # Aplicar a transformação à imagem original colorida.
+    warped = cv2.warpPerspective(
+        image,
+        matrix,
+        (max_width, max_height)
+    )
+
+    return warped
+
+
+def scan_detection(image):
+    global document_contour
+
+    # Obtém dinamicamente a largura e altura da imagem original
+    HEIGHT, WIDTH = image.shape[:2]
+
+    document_contour = np.array([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]])
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, threshold_img = cv2.threshold(
+        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    contours, _ = cv2.findContours(
+        threshold_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+
+    max_area = 0
+    max_contour = None
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > 1000:
+            perimeter = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+            if area > max_area and len(approx) == 4:
+                document_contour = approx
+                max_area = area
+
+def preprocessamento(image):
     # Converter para escala de cinza
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -34,6 +125,7 @@ class ImagePreprocessorApp:
         ("gray", "Escala de cinza"),
         ("blur", "Gaussian Blur"),
         ("threshold", "Threshold"),
+        ("warped", "Documento digitalizado"),
     ]
 
     def __init__(self, root):
@@ -43,6 +135,7 @@ class ImagePreprocessorApp:
 
         self.imagem = None
         self.resultado = None
+        self.warped = None
         self.texto_ocr = ""
         self.fotos = {}
         self.labels = {}
@@ -124,6 +217,7 @@ class ImagePreprocessorApp:
 
         self.imagem = imagem
         self.resultado = None
+        self.warped = None
         self.texto_ocr = ""
         self.btn_salvar_texto.config(state="disabled")
         self.btn.config(state="normal")
@@ -136,12 +230,25 @@ class ImagePreprocessorApp:
         if self.imagem is None:
             return
 
-        #scan_detector devolve as quatro imagens 
-        gray, blur, threshold = scan_detector(self.imagem)
+        #preprocessamento() devolve as três imagens 
+        gray, blur, threshold = preprocessamento(self.imagem)
 
         for chave, img in zip(("gray", "blur", "threshold"),
                               (gray, blur, threshold)):
             self.mostrar(chave, img)
+
+        global document_contour
+        scan_detection(self.imagem)
+        self.warped = four_point_transform(
+            self.imagem, document_contour.reshape(4, 2)
+            )
+
+        if self.warped is None:
+            messagebox.showerror(
+                "Erro", "Não foi possível aplicar a transformação de perspectiva."
+            )
+            return
+        self.mostrar("warped", self.warped)
 
         #Define a escala de cinza como arquivo que sera salvo
         self.resultado = gray
@@ -149,7 +256,7 @@ class ImagePreprocessorApp:
         self.btn_salvar_texto.config(state="disabled")
 
     def executar_ocr(self):
-        if self.resultado is None:
+        if self.warped is None:
             messagebox.showwarning(
                 "Aviso", "Processe a imagem antes de extrair o texto."
             )
@@ -157,7 +264,7 @@ class ImagePreprocessorApp:
 
         self.texto_ocr = ""
         self.btn_salvar_texto.config(state="disabled")
-        texto = extrair_texto(self.resultado)
+        texto = extrair_texto(self.warped)
 
         if not texto:
             messagebox.showinfo("OCR", "Nenhum texto foi encontrado.")
@@ -190,7 +297,7 @@ class ImagePreprocessorApp:
         messagebox.showinfo("Pronto", f"Texto salvo em:\n{caminho}")
 
     def salvar(self):
-        if self.resultado is None:
+        if self.warped is None:
             messagebox.showwarning("Aviso", "Processe a imagem antes de salvar.")
             return
 
@@ -204,7 +311,7 @@ class ImagePreprocessorApp:
         if not caminho:
             return
 
-        array = self.resultado
+        array = self.warped
         if len(array.shape) == 3:
             array = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
 
