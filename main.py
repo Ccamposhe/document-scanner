@@ -9,13 +9,13 @@ from PIL import Image, ImageTk
 IMAGEM_TESTE = "./assets/identidade-mc-lovin.jpg"
 
 def scan_detector(image):
-    # 1. Converter para escala de cinza
+    # Converter para escala de cinza
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # 2. Aplicar Gaussian Blur
+    # Aplicar Gaussian Blur
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # 3. Aplicar Threshold com Otsu
+    # Aplicar Threshold com Otsu
     _, threshold = cv2.threshold(
         blur,
         0,
@@ -23,11 +23,8 @@ def scan_detector(image):
         cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
-    # 4. Aplicar Canny pra detecção de bordas
-    edged = cv2.Canny(blur, 75, 200)
-
     # Retornar todas as etapas do processamento
-    return gray, blur, threshold, edged
+    return gray, blur, threshold
 
 
 class ImagePreprocessorApp:
@@ -37,7 +34,6 @@ class ImagePreprocessorApp:
         ("gray", "Escala de cinza"),
         ("blur", "Gaussian Blur"),
         ("threshold", "Threshold"),
-        ("edged", "Bordas (Canny)"),
     ]
 
     def __init__(self, root):
@@ -141,10 +137,10 @@ class ImagePreprocessorApp:
             return
 
         #scan_detector devolve as quatro imagens 
-        gray, blur, threshold, edged = scan_detector(self.imagem)
+        gray, blur, threshold = scan_detector(self.imagem)
 
-        for chave, img in zip(("gray", "blur", "threshold", "edged"),
-                              (gray, blur, threshold, edged)):
+        for chave, img in zip(("gray", "blur", "threshold"),
+                              (gray, blur, threshold)):
             self.mostrar(chave, img)
 
         #Define a escala de cinza como arquivo que sera salvo
