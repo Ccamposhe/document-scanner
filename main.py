@@ -17,6 +17,9 @@ from PIL import Image, ImageTk
 # recorte final é feito na imagem original, sem perder qualidade.
 LADO_DETECCAO = 500
 
+# Índice da câmera padrão. Se houver mais de uma câmera, teste 1, 2 etc.
+INDICE_CAMERA = 0
+
 # O documento precisa ocupar pelo menos 15% da foto. Isso evita escolher um
 # retângulo pequeno, como a foto 3x4 dentro de uma identidade.
 AREA_MINIMA_RELATIVA = 0.15
@@ -397,11 +400,19 @@ class ImagePreprocessorApp:
         self.inicio_ocr = 0.0
         self._redimensionar_id = None
 
+        # Estado da câmera ao vivo. A captura e a atualização da interface
+        # são feitas pelo agendador do Tkinter (root.after).
+        self.camera = None
+        self.camera_after_id = None
+        self.camera_frame = None
+        self.camera_cantos = None
+
         self._configurar_estilo()
         self._montar_cabecalho()
         self._montar_rodape()
         self._montar_conteudo()
         self._atualizar_botoes()
+        self.root.protocol("WM_DELETE_WINDOW", self.fechar)
 
     # ------------------------------------------------------------------ layout
     def _configurar_estilo(self):
@@ -481,6 +492,15 @@ class ImagePreprocessorApp:
         self.btn_carregar = ttk.Button(cabecalho, text="Abrir imagem",
                                        command=self.carregar, style="Secundario.TButton")
         self.btn_carregar.pack(side="right")
+
+        self.btn_camera = ttk.Button(cabecalho, text="Câmera ao vivo",
+                                      command=self.alternar_camera, style="Secundario.TButton")
+        self.btn_camera.pack(side="right", padx=8)
+
+        self.btn_capturar = ttk.Button(cabecalho, text="Capturar",
+                                       command=self.capturar_quadro,
+                                       style="Primario.TButton", state="disabled")
+        self.btn_capturar.pack(side="right")
 
     def _montar_rodape(self):
         rodape = tk.Frame(self.root, bg=COR_PAINEL, padx=24, pady=6)
@@ -582,25 +602,191 @@ class ImagePreprocessorApp:
     def _atualizar_botoes(self):
         """Habilita cada ação só quando ela faz sentido."""
         livre = not self.processando_ocr
-        tem_scan = self.warped is not None
+        camera_ativa = self.camera is not None
+        tem_scan = self.warped is not None and not camera_ativa
         tem_texto = bool(self.texto_ocr.strip())
 
         def estado(condicao):
             return "normal" if condicao and livre else "disabled"
 
-        self.btn_carregar.config(state=estado(True))
+        self.btn_carregar.config(state=estado(not camera_ativa))
+        self.btn_camera.config(
+            state=estado(True),
+            text="Fechar câmera" if camera_ativa else "Câmera ao vivo"
+        )
+        self.btn_capturar.config(state=estado(camera_ativa))
         self.btn_ocr.config(state=estado(tem_scan),
                             text="Ver texto" if tem_texto else "Extrair texto")
         self.btn_salvar.config(state=estado(tem_scan))
-        self.btn_ajustar.config(state=estado(self.imagem is not None))
+        self.btn_ajustar.config(state=estado(self.imagem is not None and not camera_ativa))
         for botao in self.alternadores:
             botao.config(state=estado(tem_scan))
+        self.menu_salvar.entryconfig(0, state=estado(tem_scan))
         self.menu_salvar.entryconfig(1, state=estado(tem_texto))
+
+    # ----------------------------------------------------------------- câmera ao vivo
+    def alternar_camera(self):
+        """Abre a câmera ou encerra a captura, conforme o estado atual."""
+        if self.camera is not None:
+            self.parar_camera()
+        else:
+            self.iniciar_camera()
+
+    def iniciar_camera(self):
+        """Abre a câmera padrão e inicia a atualização do quadro na interface."""
+        if self.processando_ocr:
+            return
+
+        camera = cv2.VideoCapture(INDICE_CAMERA)
+        if not camera.isOpened():
+            camera.release()
+            messagebox.showerror(
+                "Câmera indisponível",
+                "Não foi possível acessar a câmera. Verifique se ela está conectada, "
+                "se as permissões estão habilitadas e se outro programa não está usando-a."
+            )
+            return
+
+        # A câmera pode não aceitar exatamente a resolução solicitada; o tamanho
+        # real será lido de cada quadro recebido.
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.camera = camera
+        self.camera_frame = None
+        self.camera_cantos = None
+
+        # Ao entrar no modo câmera, descarta o resultado da imagem anterior.
+        self.imagem = None
+        self.nome_arquivo = ""
+        self.cantos = None
+        self.warped = None
+        self.scan_pb = None
+        self.texto_ocr = ""
+        self._definir_texto("")
+        self._esconder_texto()
+        self.info.set("Câmera ao vivo")
+
+        self.imagens.pop("original", None)
+        self.imagens.pop("warped", None)
+        self.fotos.pop("original", None)
+        self.fotos.pop("warped", None)
+        self.visores["original"].config(image="", text="Inicializando câmera…")
+        self.visores["warped"].config(image="", text="Aponte para um documento")
+
+        self.status.set("Câmera iniciada. Posicione a folha dentro do enquadramento.")
+        self._atualizar_botoes()
+        self._atualizar_camera()
+
+    def _atualizar_camera(self):
+        """Lê e processa um quadro, atualizando os dois visores da interface."""
+        self.camera_after_id = None
+        if self.camera is None:
+            return
+
+        sucesso, frame = self.camera.read()
+        if not sucesso or frame is None:
+            self.parar_camera()
+            messagebox.showerror(
+                "Falha na câmera",
+                "A câmera foi aberta, mas não foi possível receber a imagem."
+            )
+            return
+
+        self.camera_frame = frame.copy()
+        try:
+            cantos, encontrou = scan_detection(frame)
+            if encontrou:
+                self.camera_cantos = cantos.copy()
+                visualizacao = desenhar_contorno(frame, cantos)
+                previa = four_point_transform(frame, cantos)
+            else:
+                self.camera_cantos = None
+                visualizacao = frame
+                previa = None
+        except Exception as erro:
+            self.parar_camera()
+            messagebox.showerror(
+                "Erro no processamento da câmera",
+                f"Não foi possível processar o quadro recebido:\n{erro}"
+            )
+            return
+
+        self.mostrar("original", visualizacao)
+        altura, largura = frame.shape[:2]
+        self.info.set(f"Câmera ao vivo  ·  {largura} × {altura} px")
+
+        if previa is not None:
+            # Na prévia ao vivo mostramos a retificação colorida. O efeito de
+            # scanner completo é aplicado apenas quando o usuário captura.
+            self.mostrar("warped", previa)
+            self.status.set("Documento detectado. Pressione Capturar para digitalizar.")
+        else:
+            self.visores["warped"].config(image="", text="Documento não detectado")
+            self.imagens.pop("warped", None)
+            self.fotos.pop("warped", None)
+            self.status.set("Aponte a câmera para uma folha com os quatro cantos visíveis.")
+
+        # O intervalo é contado após o processamento do quadro. Se o algoritmo
+        # demorar mais, a interface não acumula quadros atrasados.
+        self.camera_after_id = self.root.after(40, self._atualizar_camera)
+
+    def capturar_quadro(self):
+        """Congela o quadro atual e o envia ao fluxo normal do scanner."""
+        if self.camera is None or self.camera_frame is None:
+            return
+
+        frame = self.camera_frame.copy()
+        cantos = self.camera_cantos.copy() if self.camera_cantos is not None else None
+
+        self.parar_camera(atualizar_botoes=False)
+        self.imagem = frame
+        self.nome_arquivo = time.strftime("captura_%Y%m%d_%H%M%S.jpg")
+        altura, largura = frame.shape[:2]
+        self.info.set(f"{self.nome_arquivo}  ·  {largura} × {altura} px")
+
+        # Se os cantos foram encontrados no vídeo, reutiliza-os. Caso contrário,
+        # tenta novamente a detecção automática e o usuário poderá ajustá-los.
+        self.processar(cantos)
+        if cantos is not None and self.warped is not None:
+            self.status.set("Captura realizada e documento detectado. Clique em Extrair texto.")
+        elif self.warped is not None:
+            self.status.set(
+                "Captura realizada, mas o documento não foi detectado com segurança. "
+                "Use Ajustar cantos para marcar a folha."
+            )
+        self._atualizar_botoes()
+
+    def parar_camera(self, atualizar_botoes=True):
+        """Cancela a atualização periódica e libera o dispositivo de câmera."""
+        if self.camera_after_id is not None:
+            try:
+                self.root.after_cancel(self.camera_after_id)
+            except tk.TclError:
+                pass
+            self.camera_after_id = None
+
+        camera = self.camera
+        self.camera = None
+        self.camera_frame = None
+        self.camera_cantos = None
+        if camera is not None:
+            camera.release()
+
+        if atualizar_botoes and hasattr(self, "btn_camera"):
+            self.status.set("Câmera encerrada. Abra uma imagem ou inicie a câmera novamente.")
+            self._atualizar_botoes()
+
+    def fechar(self):
+        """Libera a câmera antes de fechar a aplicação."""
+        self.parar_camera(atualizar_botoes=False)
+        self.root.destroy()
 
     # ----------------------------------------------------------------- ações
     def carregar(self):
         if self.processando_ocr:
             return
+        if self.camera is not None:
+            self.parar_camera()
 
         # askopenfilename abre a janela nativa do sistema para escolher um arquivo
         caminho = filedialog.askopenfilename(
