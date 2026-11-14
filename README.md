@@ -1,6 +1,6 @@
 # 📄 Scanner de Documentos
 
-Projeto acadêmico desenvolvido para a disciplina de **Algorítmos de Processamento de Imagem**, com o objetivo de explorar técnicas de processamento de imagens aplicadas à digitalização e ao reconhecimento de documentos.
+Projeto acadêmico desenvolvido para a disciplina de **Algoritmos de Processamento de Imagem**, com o objetivo de explorar técnicas de processamento de imagens aplicadas à digitalização e ao reconhecimento de documentos.
 
 A aplicação utiliza Python, OpenCV e Tkinter para carregar imagens e visualizar diferentes etapas de pré-processamento em uma interface gráfica.
 
@@ -11,19 +11,34 @@ A aplicação utiliza Python, OpenCV e Tkinter para carregar imagens e visualiza
 - 🌫️ **Gaussian Blur:** suavização da imagem para reduzir ruídos.
 - ⚫ **Threshold:** binarização automática da imagem.
 - 📐 **Canny Edge Detection:** detecção de bordas e contornos.
-- 🖥️ **Interface gráfica:** visualização dos resultados lado a lado utilizando Tkinter.
+- 🔲 **Detecção do documento:** encontra os quatro cantos da folha e mostra o contorno sobre a foto, inclusive quando a folha e o fundo têm cores parecidas.
+- 📄 **Transformação de perspectiva:** "endireita" documentos fotografados em ângulo.
+- ⏹️ **Ajuste manual dos quatro cantos** dá a opção de ajustar os cantos da imagem manualmente, caso o documento não seja detectado.
+- 🔤 **OCR com Tesseract:** extrai o texto testando versões da imagem e modos de leitura.
+- 🔄 **Girar a imagem:** botões de 90° e 180° para fotos de cabeça para baixo ou de lado.
+- 📷 **Câmera ao vivo:** prévia com a detecção em tempo real e captura do quadro.
+- 🖥️ **Interface gráfica:** abas para ver as etapas do processamento, imagens que acompanham o tamanho da janela e caixa de texto editável.
+
+## 🧭 Como usar
+
+1. **Entrada da imagem:** clique em **Escolher arquivo** ou em **Câmera ao vivo** (a prévia mostra o contorno da folha; use **Capturar quadro** para congelar a imagem).
+2. Se a foto estiver de cabeça para baixo ou de lado, use **Girar imagem** (90° esq., 180°, 90° dir.). Os resultados anteriores são limpos.
+3. Clique em **Processar**. O documento é detectado, corrigido e lido pelo OCR em segundo plano, com a barra de progresso na lateral.
+   - Se o contorno estiver errado (ou não aparecer), clique em **Ajustar cantos** e arraste os 4 círculos até os cantos da folha.
+4. Use as **abas** para escolher o que ver: _Original + pré-processamento_, _Original + digitalizada_ ou _Todos os processos_.
+5. Corrija o texto na caixa **Texto extraído**, se precisar, e use **Salvar imagem (cor)**, **Salvar imagem (P&B)** ou **Salvar texto (.txt)**.
 
 ## 🛠️ Tecnologias utilizadas
 
-| Tecnologia | Finalidade |
-|---|---|
-| [Python](https://www.python.org/) | Linguagem de programação |
-| [OpenCV](https://opencv.org/) | Processamento e análise de imagens |
-| [NumPy](https://numpy.org/) | Operações com matrizes e dados numéricos |
-| [Tkinter](https://docs.python.org/3/library/tkinter.html) | Construção da interface gráfica |
-| [Pillow](https://python-pillow.org/) | Conversão e exibição de imagens |
+| Tecnologia                                                  | Finalidade                                   |
+| ----------------------------------------------------------- | -------------------------------------------- |
+| [Python](https://www.python.org/)                           | Linguagem de programação                     |
+| [OpenCV](https://opencv.org/)                               | Processamento e análise de imagens           |
+| [NumPy](https://numpy.org/)                                 | Operações com matrizes e dados numéricos     |
+| [Tkinter](https://docs.python.org/3/library/tkinter.html)   | Construção da interface gráfica              |
+| [Pillow](https://python-pillow.org/)                        | Conversão e exibição de imagens              |
 | [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) | Motor de reconhecimento óptico de caracteres |
-| [pytesseract](https://github.com/madmaze/pytesseract) | Integração do Tesseract com Python |
+| [pytesseract](https://github.com/madmaze/pytesseract)       | Integração do Tesseract com Python           |
 
 ## 🚀 Instalação
 
@@ -261,17 +276,38 @@ No Windows, se o comando `python` não estiver disponível, tente `py -m tkinter
 
 ```text
 scanner-documentos/
-├── .venv/
-├── main.py
+├── main.py                       # ponto de entrada: só cria a janela
+├── nucleo/                       # processamento: NÃO depende de interface gráfica
+│   ├── configuracao.py           # constantes ajustáveis (cada uma comentada)
+│   ├── geometria.py              # ordenar cantos, perspectiva, retas e interseções
+│   ├── imagem.py                 # pré-processamento, efeito scanner, contorno
+│   ├── ocr.py                    # leitura do texto com o Tesseract
+│   └── deteccao/
+│       ├── pipeline.py           # detectar_documento(): orquestra as 3 passadas
+│       ├── candidatos.py         # passadas 1 e 2 (Otsu, Canny, Hough, CLAHE)
+│       ├── pontuacao.py          # nota de cada candidato
+│       └── baixo_contraste.py    # passada 3: croma, LSD, retas, texto
+├── interface/                    # interface gráfica (Tkinter)
+│   ├── janela.py                 # AplicativoScanner: liga as peças
+│   ├── estado.py                 # dados do documento atual
+│   ├── tema.py                   # cores, abas, títulos
+│   ├── widgets.py                # botão padrão
+│   ├── conversao.py              # BGR -> RGB
+│   ├── painel_lateral.py         # barra da esquerda
+│   ├── area_principal.py         # abas, ações e texto
+│   ├── visualizacao.py           # grade de imagens
+│   ├── camera.py                 # câmera ao vivo
+│   ├── processamento.py          # thread + fila
+│   └── dialogo_cantos.py         # "Ajustar cantos"
+├── assets/                       # imagens de teste
 ├── requirements.txt
 ├── README.md
 └── .gitignore
 ```
 
-- `main.py`: contém a interface gráfica e as funções de pré-processamento.
-- `requirements.txt`: lista as dependências Python.
-- `README.md`: documenta o projeto e suas instruções de uso.
-- `.gitignore`: define os arquivos e diretórios que não devem ser enviados ao Git.
+- **`nucleo/`** não importa o Tkinter: pode ser usado e testado pelo terminal. A interface só o _usa_, nunca o contrário.
+- **`interface/`** só mostra e coleta informações. `janela.py` é o único arquivo que conhece todas as peças.
+- `assets/`: imagens usadas para testar o scanner.
 - `.venv/`: ambiente virtual local, que não deve ser versionado.
 
 ## 🔬 Etapas do pré-processamento
@@ -296,15 +332,64 @@ A função `cv2.threshold()` transforma a imagem em uma representação binária
 
 A função `cv2.Canny()` identifica as bordas presentes na imagem a partir dos limiares configurados no código.
 
+### 6. Contorno detectado
+
+A função `detectar_documento()` (em `nucleo/deteccao/pipeline.py`) procura os quatro cantos da folha:
+
+1. **Reduz a foto** para 500 px no maior lado. Fica rápido (cerca de 20 ms) e ignora detalhes pequenos, como a textura da mesa.
+2. **Apaga o texto** com fechamento morfológico (`cv2.morphologyEx` com `MORPH_CLOSE`). A folha fica lisa e sobram só as bordas grandes.
+3. **Usa dois canais:** o cinza comum e a **"brancura"** (brilho menos saturação do HSV). Papel é claro e sem cor, enquanto madeira e tecido têm cor. Isso separa a folha de fundos claros.
+4. **Gera vários candidatos** com Otsu e Canny. Nas bordas do Canny, usa o contorno _de dentro_ (`RETR_LIST`), que continua certo mesmo quando a borda da folha encosta em outra linha (tábua, outra folha).
+5. **Encaixa os lados nas retas reais** (`cv2.HoughLinesP`). Quando uma sombra "come" um canto, o lado é corrigido pela reta da borda e o canto é recalculado pela interseção.
+6. **Dá uma nota** a cada candidato: quanto do contorno passa sobre bordas reais e o tamanho da área. Fica o melhor.
+
+Se nada for encontrado, uma 2ª passada usa **CLAHE** (contraste local) para revelar bordas fracas, exigindo mais apoio nas bordas (75%). Ela não é usada sempre porque também realça texturas, como madeira e piso.
+
+**3ª passada: folha e fundo de cores parecidas.** Quando a folha tem quase o mesmo brilho do fundo (papel branco em parede branca, folha cinza em mesa cinza), as passadas acima falham por três motivos: o fechamento morfológico apaga a linha fina que marca a borda do papel, o limiar do Canny vem da mediana do brilho (alto demais em fotos escuras ou sem contraste) e só o brilho era comparado. A 3ª passada (`passada_baixo_contraste`, em `nucleo/deteccao/baixo_contraste.py`) resolve assim:
+
+1. **Croma (Lab):** mede a distância da cor ao cinza neutro, `√((a−128)² + (b−128)²)`. Papel é neutro; parede, madeira e tecido quase sempre têm algum tom. A folha se separa do fundo mesmo com brilho igual.
+2. **LSD (Line Segment Detector):** acha segmentos de reta pela coerência da direção do gradiente, sem limiar de borda, então detecta lados muito fracos desde que sejam retos. Roda no brilho e no croma.
+3. **Retas e quadrilátero:** os segmentos quase colineares são somados em retas, e o programa testa combinações de 2 retas "horizontais" + 2 "verticais". Cada candidato ganha nota = apoio nos segmentos × √área, e todos os lados medidos precisam de apoio mínimo.
+4. **O texto como âncora:** uma máscara de texto (blackhat + junção das letras em blocos) garante que a folha **contenha** o texto. Um lado que corta as letras nunca é borda de papel.
+
+Essa passada também é uma "segunda opinião": se o resultado das anteriores encosta na margem da foto (a borda daquele lado pode não ter sido vista), ela confere se existe um quadrilátero com os 4 lados visíveis. Além disso, a nota da 1ª passada agora exige que **nenhum lado** fique sem borda (`LADO_MINIMO`, em `nucleo/configuracao.py`), e não só a média, o que evita aceitar diagonais inventadas.
+
+A câmera ao vivo usa só as passadas rápidas (`baixo_contraste=False`); ao **Capturar**, o quadro congelado é analisado com todas.
+
+Se nenhum candidato for confiável, a imagem inteira é usada e a interface sugere **Ajustar cantos**. **Dica:** mesmo com a 3ª passada, fotografe com a borda da folha visível e, se puder, sobre um fundo de tom diferente do papel.
+
+### 7. Documento digitalizado
+
+`transformar_perspectiva()` (em `nucleo/geometria.py`) usa `cv2.getPerspectiveTransform()` e `cv2.warpPerspective()` para transformar os quatro cantos encontrados em um retângulo, como se a foto tivesse sido tirada de cima.
+
+### 8. Efeito scanner (P&B)
+
+`efeito_scanner()` (em `nucleo/imagem.py`) deixa a imagem com cara de escaneada:
+
+1. Amplia para ~2200 px, para as letras ficarem lisas.
+2. Estima o fundo do papel (fechamento morfológico + mediana) e divide a imagem por ele, removendo sombras.
+3. Aplica nitidez (_unsharp mask_).
+4. Usa uma curva de tons: o quase branco vira branco puro e o texto escurece, mantendo as bordas das letras suaves.
+
+O OCR continua lendo a versão colorida: nos testes, o P&B forte "engrossou" letras pequenas e piorou um pouco a leitura.
+
+### 9. OCR
+
+O `nucleo/ocr.py` prepara a imagem e chama o Tesseract:
+
+- corta uma margem fina (1,5%) para remover restos do fundo, que viram caracteres falsos;
+- amplia letras pequenas e corrige sombras dividindo a imagem pelo seu "fundo" borrado;
+- usa os idiomas `por+eng` e o motor LSTM (`--oem 1`);
+- faz quatro leituras **em paralelo**, combinando versões da imagem com modos de layout (PSM 6, 3 e 11). Uma das versões usa CLAHE e nitidez;
+- escolhe a leitura com melhor confiança média, sem perder muito texto.
+
+O PSM 6 (página como um bloco único) é o mais importante em folhas inteiras. O PSM 3 tenta achar colunas e, ao lado de logotipos, "picotava" as linhas.
+
+O painel de texto mostra a confiança média e quantos caracteres têm confiança ≥ 40. A confiança é uma estimativa do Tesseract, não uma porcentagem de acertos.
+
+> As etapas 2 a 5 acontecem internamente; a interface mostra apenas a imagem original e o resultado final.
+
 Essas técnicas permitem comparar diferentes representações da mesma imagem e compreender como o pré-processamento pode auxiliar em tarefas de análise e reconhecimento de documentos.
-
-## 🗺️ Próximas etapas
-
-- [ ] Implementar a detecção automática dos limites do documento.
-- [ ] Aplicar transformação de perspectiva para corrigir documentos fotografados em ângulo.
-- [ ] Integrar o Tesseract OCR para extrair texto das imagens.
-- [ ] Permitir a visualização e exportação do texto reconhecido.
-- [ ] Avaliar os resultados com documentos em diferentes condições de iluminação.
 
 ## 🎓 Objetivo acadêmico
 
