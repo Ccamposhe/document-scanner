@@ -75,6 +75,7 @@ class AplicativoScanner:
         self.camera = ControladorCamera(
             self.raiz,
             ao_quadro=self._ao_quadro_camera,
+            ao_etapas=self._ao_etapas_camera,
             ao_falha=self._ao_falha_camera,
         )
         self.processador = ProcessadorDocumento(
@@ -146,10 +147,10 @@ class AplicativoScanner:
 
     def capturar_quadro(self):
         """Congela o quadro atual da câmera e o processa."""
-        if not self.camera.ativa or self.camera.quadro_atual is None:
+        quadro = self.camera.quadro_atual  # já é uma cópia
+        if not self.camera.ativa or quadro is None:
             return
 
-        quadro = self.camera.quadro_atual.copy()
         self.parar_camera(atualizar_status=False)
 
         self.estado.imagem = quadro
@@ -159,16 +160,33 @@ class AplicativoScanner:
         # falhar, dá para marcar a folha com Ajustar cantos.
         self._iniciar_processamento(None)
 
-    def _ao_quadro_camera(self, quadro, cantos, previa):
-        """A cada quadro da câmera: mostra a imagem e, se achou o documento, a prévia."""
+    def _ao_quadro_camera(self, quadro, cantos):
+        """Chegou um quadro novo: mostra a imagem, com o contorno se a folha foi achada."""
         if cantos is not None:
             self.area.mostrar("original", desenhar_contorno(quadro, cantos))
-            self.area.mostrar("digitalizada", previa)
-            self.painel.definir_status("Documento detectado. Capture o quadro para digitalizar.")
         else:
             self.area.mostrar("original", quadro)
-            self.area.limpar_imagens(("digitalizada",), "Documento não detectado")
+
+    def _ao_etapas_camera(self, etapas):
+        """Uma análise terminou: atualiza os cartões das etapas e a dica de status.
+
+        Só os cartões da aba atual são atualizados (os escondidos não gastam
+        processamento). Sem folha, as etapas do documento mostram o aviso.
+        """
+        encontrou = etapas["digitalizada"] is not None
+        if encontrou:
+            self.painel.definir_status("Documento detectado. Capture o quadro para digitalizar.")
+        else:
             self.painel.definir_status("Aponte para uma folha com os quatro cantos visíveis.")
+
+        visiveis = self.area.cartoes_visiveis()
+        for chave in ("contorno", "cinza", "desfocada", "binaria", "digitalizada", "pb"):
+            if chave not in visiveis:
+                continue
+            if etapas[chave] is not None:
+                self.area.mostrar(chave, etapas[chave])
+            else:
+                self.area.limpar_imagens((chave,), "Documento não detectado")
 
     def _ao_falha_camera(self, titulo, mensagem):
         """A câmera não abriu ou falhou durante o uso (já está desligada)."""

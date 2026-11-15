@@ -131,6 +131,10 @@ class AreaPrincipal(tk.Frame):
         else:
             self._frame_salvar.pack_forget()
 
+    def cartoes_visiveis(self):
+        """Chaves dos cartões que aparecem na aba atual (a câmera só atualiza esses)."""
+        return self._modo_atual().cartoes
+
     # ------------------------------------------------------------ imagens e texto
 
     def mostrar(self, chave, array):

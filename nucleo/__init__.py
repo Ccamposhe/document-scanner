@@ -9,5 +9,6 @@ Organização:
     geometria     cantos, retas e transformação de perspectiva
     deteccao/     como a folha é encontrada na foto (3 passadas)
     imagem        pré-processamento, efeito de scanner e desenho do contorno
+    analise_rapida  as etapas em versão leve, para a prévia da câmera ao vivo
     ocr           leitura do texto com o Tesseract
 """

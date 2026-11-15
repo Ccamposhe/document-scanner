@@ -16,7 +16,7 @@ A aplicação utiliza Python, OpenCV e Tkinter para carregar imagens e visualiza
 - ⏹️ **Ajuste manual dos quatro cantos** dá a opção de ajustar os cantos da imagem manualmente, caso o documento não seja detectado.
 - 🔤 **OCR com Tesseract:** extrai o texto testando versões da imagem e modos de leitura.
 - 🔄 **Girar a imagem:** botões de 90° e 180° para fotos de cabeça para baixo ou de lado.
-- 📷 **Câmera ao vivo:** prévia com a detecção em tempo real e captura do quadro.
+- 📷 **Câmera ao vivo:** enquanto a câmera filma, todas as etapas (contorno, cinza, blur, threshold, documento digitalizado e P&B) aparecem **simultaneamente** nos cartões. A leitura e a análise rodam em threads separadas, então a janela não trava (ritmos ajustáveis em `nucleo/configuracao.py`). O OCR roda ao capturar o quadro.
 - 🖥️ **Interface gráfica:** abas para ver as etapas do processamento, imagens que acompanham o tamanho da janela e caixa de texto editável.
 
 ## 🧭 Como usar
@@ -281,6 +281,7 @@ scanner-documentos/
 │   ├── configuracao.py           # constantes ajustáveis (cada uma comentada)
 │   ├── geometria.py              # ordenar cantos, perspectiva, retas e interseções
 │   ├── imagem.py                 # pré-processamento, efeito scanner, contorno
+│   ├── analise_rapida.py         # as etapas em versão leve (prévia da câmera)
 │   ├── ocr.py                    # leitura do texto com o Tesseract
 │   └── deteccao/
 │       ├── pipeline.py           # detectar_documento(): orquestra as 3 passadas
